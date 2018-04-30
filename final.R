@@ -24,6 +24,19 @@ my.table[,1]
 
 # Now we have table as what we using during class
 
+# 1 mcLDA
+# 1.0 pre functions
+
+# 1.1 split data and label
+label <- my.table[,1]
+data <- my.table[,-1]
+
+mcLDA.mean <- by(data, label, mean)
+mcLDA.cov <- by(data,label, cov)
+mcLDA.grandMean <- colMeans(data)
+mcLDA.withinCov <- 
 
 
 
+# 1.x clean variables
+rm(label,data)

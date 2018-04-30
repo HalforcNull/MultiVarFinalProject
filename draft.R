@@ -30,9 +30,10 @@ within.cov <- (1/length(class.labs))*
 
 ### get between covariance
 between.cov <- Reduce("+",
-                      lapply(1:n.classes, function(x, class.labs, mean.vects, grand.mean){
-                                                          sum(class.labs==x)/length(class.labs)*(mean.vects[[x]]-grand.mean)%*%t(mean.vects[[x]]-grand.mean)
-                                                  },
+                      lapply(1:n.classes, function(x, class.labs, mean.vects, grand.mean)
+                                          {
+                                              sum(class.labs==x)/length(class.labs)*(mean.vects[[x]]-grand.mean)%*%t(mean.vects[[x]]-grand.mean)
+                                          },
                                 class.labs, mean.vects, grand.mean
                              )
                       )
