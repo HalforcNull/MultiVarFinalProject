@@ -26,15 +26,25 @@ my.table[,1]
 
 # 1 mcLDA
 # 1.0 pre functions
-
+mcLDA.fun.calcWithinCov <- function(classCov){
+  return()
+}
 # 1.1 split data and label
 label <- my.table[,1]
-data <- my.table[,-1]
+data <- as.matrix(my.table[,-1])
+dim(label)
+dim(data)
 
-mcLDA.mean <- by(data, label, mean)
-mcLDA.cov <- by(data,label, cov)
+
+mcLDA.mean <- by(data, label, colMeans)
+mcLDA.class.cov <- by(data,label, cov)
 mcLDA.grandMean <- colMeans(data)
-mcLDA.withinCov <- 
+
+mcLDA.each.cov <- lapply(1:13, 
+       function(x){12*mcLDA.class.cov[[x]]})
+
+
+
 
 
 
