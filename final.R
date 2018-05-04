@@ -110,6 +110,9 @@ rm(mcLDA.mean,mcLDA.class.cov,mcLDA.allClassMean,mcLDA.between.cov,mcLDA.within.
 
 
 # 1.Support function
+# libraries:
+library(mvtnorm)
+
 
 # generate matrix given dim n
 get.P.Matrix <- function(n){
@@ -124,7 +127,6 @@ get.P.Matrix <- function(n){
   }
   return(result)
 }
-
 
 # get score Matrix based on a kernel function
 # obsevation index is first index
@@ -177,18 +179,82 @@ get.MSt <- function(SSa, SSe, n){
   return((SSa+SSe)/(N-1))
 }
 
+# Calculate Capital Sigma
+get.Cov <- function(var.a, var.e, n){
+  P <- get.P.Matrix(n)
+  return(P%*%t(P)*var.a + var.e * diag(n*(n-1)/2))
+}
+
+# Calc parms by given data and kernel function
+get.Parms <- function(dat, kernel_fun){
+  # observation count
+  n <- dim(dat)[1]
+  
+  # score matrix
+  score <- get.Score(dat, kernel_fun)
+  
+  # Sn
+  Sn <- NULL
+  for(j in 1:(n-1)){
+    Sn <- c(Sn, score[j,][c((j+1):n)])
+  }
+  
+  # P matrix
+  P_matrix <- get.P.Matrix(n)
+  tmp <- P_matrix %*% t(P_matrix)
+  
+  # eigen of P*Pt
+  eigen <- eigen(tmp)
+  
+  # SSa 
+  SSa <- get.SSa(Sn, eigen$vectors, n)
+  
+  # SSe
+  SSe <- get.SSe(Sn, eigen$vectors, n)
+  
+  # MSa
+  MSa <- get.MSa(SSa, n)
+  
+  # MSe
+  Mse <- get.MSe(SSe, n)
+  
+  # mean hat
+  mean <- mean(Sn)
+  
+  # variance
+  var.a <- ( MSa - Mse ) / ( n - 2 )
+  if(var.a < 0)
+  {
+    var.a = 0
+    var.e = get.MSt(SSa, SSe, n)
+  }
+  else
+  {
+    var.e = Mse
+  }
+  
+  result <- NULL
+  result$a <- var.a
+  result$e <- var.e
+  result$mu <- mean
+  result$sn <-Sn
+  
+  return(result)
+}
+
 # 2. Kernel function
 ker_1 <- function(x,y){
-  return(abs(sum(x,y)))
+  return(cor(x,y))
 }
 
 
 # 3. Main function
 # 3.1 Training
 #   training will give us a model with:
-#   13 means and 13 variance 
-#   original data
-#   kernel function (maybe)
+#   a.  13 means, 
+#   b.  13 a_var, 
+#   c.  13 e_var
+
 trainModel <- function(traning.data){
   # clean data
   my.table <- NULL
@@ -201,79 +267,143 @@ trainModel <- function(traning.data){
     }
   }
   colnames(my.table) <- NULL
-  dim(my.table) 
+  #dim(my.table) 
   my.table<-t(my.table)
   my.table[,1]
   
-  mu.array <- seq(from = 1, to = 1, length.out = 13)
-  var.a.array <- seq(from = 1, to = 1, length.out = 13)
-  var.e.array <- seq(from = 1, to = 1, length.out = 13)
+  mu.array <- rep(1, 13)
+  var.a.array <- rep(1, 13)
+  var.e.array <- rep(1, 13)
+  P.array <- rep(1, 13)
   
   # calc mean, var a, var e for each class
+  # use this calc P(Sn)
   for(i in 1:13){
     # data in class i
     class.dat <- my.table[which(my.table[,1] == i),-1]
     
-    # observation count
-    class.n <- dim(class.dat)[1]
-    
-    # score matrix
-    class.score <- get.Score(class.dat, ker_1)
-    
-    # Sn
-    class.Sn <- NULL
-    for(j in 1:(class.n-1)){
-      class.Sn <- c(class.Sn, class.score[j,][c((j+1):class.n)])
-    }
-    
-    # P matrix
-    P_matrix <- get.P.Matrix(class.n)
-    tmp <- P_matrix %*% t(P_matrix)
-    
-    # eigen of P*Pt
-    class.eigen <- eigen(tmp)
-    
-    # SSa 
-    class.SSa <- get.SSa(class.Sn, class.eigen$vectors, class.n)
-    
-    # SSe
-    class.SSe <- get.SSe(class.Sn, class.eigen$vectors, class.n)
-    
-    # MSa
-    class.MSa <- get.MSa(class.SSa, class.n)
-    
-    # MSe
-    class.Mse <- get.MSe(class.SSe, class.n)
-    
-    # mean hat
-    class.mean <- mean(Sn)
-    
-    # variance
-    class.var.a <- ( class.MSa - class.Mse ) / ( class.n - 2 )
-    if(class.var.a < 0)
-    {
-      class.var.a = 0
-      class.var.e = get.MSt(class.SSa, class.SSe, class.n)
-    }
-    else
-    {
-      class.var.e = class.Mse
-    }
+    class.result <- get.Parms(class.dat, ker_1)
     
     # assign result to matrix
-    mu.array[j] <- mean(class.Sn)
-    var.a.array[j] <- class.var.a
-    var.e.array[j] <- class.var.e
+    mu.array[i] = class.result$mu
+    var.a.array[i] = class.result$a
+    var.e.array[i] = class.result$e
+    
+    Sigma_Sn <- get.Cov(class.result$a, class.result$e, dim(class.dat)[1])
+    
+    P.array[i] <- dmvnorm(class.result$sn, mean=rep(class.result$mu, length(class.result$sn)), sigma=Sigma_Sn, log=TRUE)
+    
   }  
   
+  cat(var.e.array)
   
+  result <- NULL
+  result$mu <- mu.array
+  result$a <- var.a.array
+  result$e <- var.e.array
+  result$p <- P.array
+  result$table <- my.table
+  
+  return(result)
 }
 
 # 3.2 Classification
 #   classification function will get 200*31 matrix
 #   return which class it should belong to
-classificationResult <- function(data){
+classificationResult <- function(testData, model){
+  # check testData
+  if(
+    dim(testData)[1] != 200 ||
+    dim(testData)[2] != 31 ||
+    dim(testData)[4] != 13
+  ){
+    cat('Test Data does not fit model. We need 200*31*p*13 sized test data.')
+    cat('\r\n')
+    return(NULL)
+  }
   
+  # clean test data, change into 6300 col ,  (13*p) row matrix
+  testingSampleinEachGroup <- dim(testData)[3]
+  testingTable <- NULL
+  for(i in 1:13){
+    for(j in 1:testingSampleinEachGroup){
+      rawMatrix <- testData[,,j,i]
+      rawVector <- as.vector(rawMatrix)
+      vectorWithLabel <- c(i,rawVector)
+      # Here we add 'label' to indicate these sample are belong to same group. But, we don't know which pen this group is belong to.
+      # Be careful when using this label
+      testingTable <- cbind(testingTable, vectorWithLabel)
+    }
+  }
+  colnames(testingTable) <- NULL
+  testingTable <- t(testingTable)
+  
+  # read model data
+  mu.array <- model$mu
+  var.a.array <- model$a
+  var.e.array <- model$e
+  p.array <- model$p
+  trainingTable <- model$table
+  
+  
+  # for each testing group i, 
+  #   1.  Combine its data with training data with label j
+  #   2.  Calculate Cap_Sigma_s using var_a, var_e from class j
+  #   3.  Calculate the joint prob Pij( c( testingGroup_i, trainingGroup_j ) ) 
+  #       And pull the prob of Pj( trainingGroup_j ) from model
+  #   4.  Then conditional prob Pi|j = Pij / Pj
+  #   5.  Find the j, such that Pi|j has the biggest value
+  #   6.  j is the pen group i come from
+  resultLabel <- rep(0, 13)
+  highestProb <- rep(0, 13)
+  for(i in 1:13){
+    # testing data on group i, without group label
+    groupData <- testingTable[which(testingTable[,1] == i), -1]
+    for( j in 1:13){
+      
+      var.a <- var.a.array[j]
+      var.e <- var.e.array[j]
+      mu <- mu.array[j]
+      Pj <- p.array[j]
+      
+      # training data for pen j, without pen label
+      trainingData <- trainingTable[which(trainingTable[,1] == j), -1]
+      
+      # combine data
+      dat <- rbind(groupData, trainingData)
+      dat.n <- dim(dat)[1]
+      
+      # Calculate Cap_Sigma_s
+      Sigma_s <- get.Cov(var.a, var.e, dim(dat)[1])
+      
+      # Calculate s
+      # score matrix
+      score <- get.Score(dat, kernel_fun)
+      
+      # S
+      S <- NULL
+      for(k in 1:(dat.n-1)){
+        S <- c(S, score[k,][c((k+1):dat.n)])
+      }
+      
+      # joint prob:
+      Pij <- dmvnorm(S, mean=rep(mu, length(S)), sigma=Sigma_s, log = TRUE)
+      
+      # Pi|j
+      P_cond <- Pij - Pj
+      
+      if( ( P_cond > highestProb[i]) ){
+        #we find a higher Pi|j, replace existing
+        resultLabel[i] = j
+        highestProb[i] = P_cond
+      }
+    }
+    
+    
+  }
+  
+  
+  return(resultLabel)
 }
 
 
