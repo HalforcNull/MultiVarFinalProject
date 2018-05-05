@@ -308,8 +308,8 @@ trainModel <- function(traning.data){
 }
 
 # 3.2 Classification
-#   classification function will get 200*31 matrix
-#   return which class it should belong to
+#   classification function will take 200*31*p*13 matrix
+#   return a vector of 13 length. Shows which class each 200*31*p data block should belong to
 classificationResult <- function(testData, model){
   # check testData
   if(
